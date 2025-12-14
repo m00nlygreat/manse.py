@@ -1,0 +1,4 @@
+# Treat common source/docs as text for diffs and consistent EOL
+*.md text eol=lf
+*.py text eol=lf
+
