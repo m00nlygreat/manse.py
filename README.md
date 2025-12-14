@@ -11,7 +11,7 @@
 ## 사용법
 
 ```bash
-python manse.py --date YYYY-MM-DD [--time HH:MM] [--tz HOURS] [--lon DEGREES] [--lmt]
+python manse.py --date YYYY-MM-DD [--time HH:MM] [--tz HOURS] [--lon DEGREES] [--lmt] [--cycle N]
 ```
 
 ## Command line parameters

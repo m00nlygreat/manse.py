@@ -217,7 +217,7 @@ def daewoon_direction(gz_year: str, is_female: bool) -> int:
     return +1 if yang_year else -1
 
 
-def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, direction: int, cycles: int = 8):
+def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, direction: int, cycles: int = 10):
     """Compute daewoon for selected direction (+1 forward, -1 backward)."""
     if direction not in (+1, -1):
         raise ValueError('direction must be +1 (forward) or -1 (backward)')
@@ -307,7 +307,8 @@ if __name__ == "__main__":
     p.add_argument("--time", default="12:00")            # HH:MM (local civil)
     p.add_argument("--tz", type=float, default=9.0)      # hours (e.g., 9 for KST)
     p.add_argument("--lon", type=float, default=126.98)  # Seoul ≈ 126.98E
-    p.add_argument("--lmt", action="store_true")         # apply LMT boundary shift
+    p.add_argument("--lmt", action="store_true")
+    p.add_argument("--cycle", type=int, default=10)     # daewoon cycles         # apply LMT boundary shift
     args = p.parse_args()
 
     y, m, d = map(int, args.date.split("-"))
@@ -323,7 +324,7 @@ if __name__ == "__main__":
             "hour":  gz_hour
         },
         "sex": ("female" if args.female else "male"),
-        "daewoon": daewoon_info(JD_utc, y, gz_month, daewoon_direction(gz_year, is_female=bool(args.female)))
+        "daewoon": daewoon_info(JD_utc, y, gz_month, daewoon_direction(gz_year, is_female=bool(args.female)), cycles=args.cycle)
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
