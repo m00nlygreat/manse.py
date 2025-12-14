@@ -45,8 +45,8 @@ python manse.py --date YYYY-MM-DD [--time HH:MM] [--male|--female] [--tz HOURS] 
 
 ```json
 {
-  "gregorian": "YYYY-MM-DD HH:MM",
-  "lunar": "YYYY-MM-DD HH:MM",
+  "gregorian": "YYYY-MM-DDTHH:MM:SS",
+  "lunar": "YYYY-MM-DDTHH:MM:SS",
   "yoon": false,
   "ganzhi": {
     "year": "…",
@@ -57,8 +57,10 @@ python manse.py --date YYYY-MM-DD [--time HH:MM] [--male|--female] [--tz HOURS] 
   "sex": "male",
   "daewoon": {
     "direction": "forward",
-    "start_age": 0,
-    "cycles": [{"n": 1, "age_start": 0, "pillar": "…"}]
+    "start_age": 0.0,
+    "date_start": "YYYY-MM-DDTHH:MM:SS",
+    "date_end": "YYYY-MM-DDTHH:MM:SS",
+    "cycles": [{"n": 1, "age_start": 0.0, "age_end": 10.0, "date_start": "YYYY-MM-DDTHH:MM:SS", "date_end": "YYYY-MM-DDTHH:MM:SS", "pillar": "…"}]
   }
 }
 ```
@@ -67,4 +69,4 @@ python manse.py --date YYYY-MM-DD [--time HH:MM] [--male|--female] [--tz HOURS] 
 
 - 기본 출력에 `daewoon`이 포함됩니다.
 - 성별(`sex`)과 출생 `ganzhi.year`의 천간 음양을 기준으로 순행/역행을 선택해 `daewoon.direction`과 대운 목록을 계산합니다.
-- 첫 대운 시작 나이는 “출생 시각 ↔ 해당 방향 절기(절입) 시각”의 차이를 `3일=1년`으로 환산해 `floor` 처리합니다.
+- 첫 대운 시작 나이는 “출생 시각 ↔ 해당 방향 절기(절입) 시각”의 차이를 `3일=1년`으로 환산한 뒤, `365.242196일=1년`으로 다시 시간으로 바꿔 초 단위까지 계산합니다.

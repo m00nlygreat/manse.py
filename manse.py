@@ -119,6 +119,7 @@ def hour_pillar(day_gz:str, hour:int, minute:int, use_lmt:bool, lon_deg:float, t
 # ── Main ────────────────────────────────────────────────────────────────────
 
 # Daewoon (10-year luck cycles) helpers
+_TROPICAL_YEAR_DAYS = 365.242196
 _TERMS12 = [
     (315.0, "입춘", 2),
     (345.0, "경칩", 3),
@@ -311,6 +312,21 @@ def _is_yang_stem(stem: str) -> bool:
     return (TEN_STEMS.index(stem) % 2) == 0
 
 
+def _add_years_clamped(dt: datetime.datetime, years: int) -> datetime.datetime:
+    """Add years, clamping day for Feb 29 etc."""
+    if years == 0:
+        return dt
+    target_year = dt.year + years
+    try:
+        return dt.replace(year=target_year)
+    except ValueError:
+        if dt.month == 2 and dt.day == 29:
+            return dt.replace(year=target_year, day=28)
+        # Clamp to last day of the target month.
+        last_day = (datetime.datetime(target_year, dt.month, 1) + datetime.timedelta(days=31)).replace(day=1) - datetime.timedelta(days=1)
+        return dt.replace(year=target_year, day=last_day.day)
+
+
 def daewoon_direction(gz_year: str, is_female: bool) -> int:
     """Return +1 for forward, -1 for backward."""
     yang_year = _is_yang_stem(gz_year[0])
@@ -319,7 +335,14 @@ def daewoon_direction(gz_year: str, is_female: bool) -> int:
     return +1 if yang_year else -1
 
 
-def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, direction: int, cycles: int = 10):
+def daewoon_info(
+    JD_birth_utc: float,
+    birth_year: int,
+    birth_local_dt: datetime.datetime,
+    gz_month: str,
+    direction: int,
+    cycles: int = 10,
+):
     """Compute daewoon for selected direction (+1 forward, -1 backward)."""
     if direction not in (+1, -1):
         raise ValueError('direction must be +1 (forward) or -1 (backward)')
@@ -339,9 +362,11 @@ def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, direction:
         y, m, d, hh, mm, ss = jd_to_gregorian(jd)
         return f"{y:04d}-{m:02d}-{d:02d}T{hh:02d}:{mm:02d}:{ss:02d}Z"
 
-    def start_age(days):
-        years = days / 3.0
-        return years, int(math.floor(years + 1e-12))
+    def dt_iso_local(dt: datetime.datetime) -> str:
+        return dt.isoformat(timespec='seconds')
+
+    def start_age_years(days: float) -> float:
+        return days / 3.0
 
     if direction == +1:
         JD_target, term_name, term_deg = JD_next, next_name, next_deg
@@ -352,26 +377,36 @@ def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, direction:
         days = max(0.0, (JD_birth_utc - JD_target))
         dir_name = 'backward'
 
-    start_years, start_age_int = start_age(days)
+    start_years = start_age_years(days)
+    start_dt = birth_local_dt + datetime.timedelta(days=start_years * _TROPICAL_YEAR_DAYS)
 
     base = _i60_from_ganzhi(gz_month)
 
     out_cycles = []
     for n in range(1, cycles + 1):
         i60 = (base + direction * n) % 60
-        age_start = start_age_int + (n - 1) * 10
+        age_start = start_years + (n - 1) * 10.0
+        age_end = start_years + n * 10.0
+        cycle_start_dt = start_dt + datetime.timedelta(days=(n - 1) * 10.0 * _TROPICAL_YEAR_DAYS)
+        cycle_end_dt = (start_dt + datetime.timedelta(days=n * 10.0 * _TROPICAL_YEAR_DAYS)) - datetime.timedelta(seconds=1)
         out_cycles.append({
             'n': n,
             'age_start': age_start,
-            'age_end': age_start + 9,
+            'age_end': age_end,
+            'date_start': dt_iso_local(cycle_start_dt),
+            'date_end': dt_iso_local(cycle_end_dt),
             'pillar': ganzhi_from_index(i60),
         })
+
+    daewoon_start_date = dt_iso_local(start_dt)
+    daewoon_end_date = dt_iso_local((start_dt + datetime.timedelta(days=cycles * 10.0 * _TROPICAL_YEAR_DAYS)) - datetime.timedelta(seconds=1))
 
     return {
         'rule': {
             'term_set': '12-jeol (30deg steps from 315deg)',
             'day_to_year': 3.0,
-            'start_age_rounding': 'floor',
+            'tropical_year_days': _TROPICAL_YEAR_DAYS,
+            'start_age_rounding': 'exact',
             'first_cycle_from': 'month_pillar_next_or_prev',
             'direction_rule': 'male/female + year-stem yin-yang',
         },
@@ -381,7 +416,9 @@ def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, direction:
         'to_term': {'name': term_name, 'deg': term_deg, 'jd_utc': JD_target, 'utc': jd_iso(JD_target)},
         'days': days,
         'start_age_years': start_years,
-        'start_age': start_age_int,
+        'start_age': start_years,
+        'date_start': daewoon_start_date,
+        'date_end': daewoon_end_date,
         'cycles': out_cycles,
     }
 
@@ -477,11 +514,11 @@ if __name__ == "__main__":
     lunar_str = None
     yoon = None
     if lunar_r is not None:
-        lunar_str = f"{lunar_r[0]:04d}-{lunar_r[1]:02d}-{lunar_r[2]:02d} {hh:02d}:{mm:02d}"
+        lunar_str = datetime.datetime(lunar_r[0], lunar_r[1], lunar_r[2], hh, mm).isoformat(timespec='seconds')
         yoon = bool(lunar_r[3])
 
     result = {
-        "gregorian": f"{y:04d}-{m:02d}-{d:02d} {hh:02d}:{mm:02d}",
+        "gregorian": datetime.datetime(y, m, d, hh, mm).isoformat(timespec='seconds'),
         "lunar": lunar_str,
         "yoon": yoon,
         "ganzhi": {
@@ -491,7 +528,14 @@ if __name__ == "__main__":
             "hour":  gz_hour
         },
         "sex": ("female" if is_female else "male"),
-        "daewoon": daewoon_info(JD_utc, y, gz_month, daewoon_direction(gz_year, is_female=is_female), cycles=args.cycle)
+        "daewoon": daewoon_info(
+            JD_utc,
+            y,
+            datetime.datetime(y, m, d, hh, mm),
+            gz_month,
+            daewoon_direction(gz_year, is_female=is_female),
+            cycles=args.cycle,
+        )
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
