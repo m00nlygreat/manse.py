@@ -204,8 +204,24 @@ def _next_prev_term_times(JD_birth_utc: float, birth_year: int, next_term, prev_
 
     return (JD_next, next_name, next_deg), (JD_prev, prev_name, prev_deg)
 
-def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, cycles: int = 8):
-    """Compute forward/backward daewoon options (no gender input)."""
+
+def _is_yang_stem(stem: str) -> bool:
+    return (TEN_STEMS.index(stem) % 2) == 0
+
+
+def daewoon_direction(gz_year: str, is_female: bool) -> int:
+    """Return +1 for forward, -1 for backward."""
+    yang_year = _is_yang_stem(gz_year[0])
+    if is_female:
+        return +1 if not yang_year else -1
+    return +1 if yang_year else -1
+
+
+def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, direction: int, cycles: int = 8):
+    """Compute daewoon for selected direction (+1 forward, -1 backward)."""
+    if direction not in (+1, -1):
+        raise ValueError('direction must be +1 (forward) or -1 (backward)')
+
     lam = sun_ecliptic_longitude_deg(JD_birth_utc)
     idx = _term_index_from_longitude(lam)
 
@@ -225,52 +241,48 @@ def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, cycles: in
         years = days / 3.0
         return years, int(math.floor(years + 1e-12))
 
-    forward_days = max(0.0, (JD_next - JD_birth_utc))
-    backward_days = max(0.0, (JD_birth_utc - JD_prev))
-    forward_years, forward_age = start_age(forward_days)
-    backward_years, backward_age = start_age(backward_days)
+    if direction == +1:
+        JD_target, term_name, term_deg = JD_next, next_name, next_deg
+        days = max(0.0, (JD_target - JD_birth_utc))
+        dir_name = 'forward'
+    else:
+        JD_target, term_name, term_deg = JD_prev, prev_name, prev_deg
+        days = max(0.0, (JD_birth_utc - JD_target))
+        dir_name = 'backward'
+
+    start_years, start_age_int = start_age(days)
 
     base = _i60_from_ganzhi(gz_month)
 
-    def cycle_list(direction: int, first_age: int):
-        out = []
-        for n in range(1, cycles + 1):
-            i60 = (base + direction * n) % 60
-            age_start = first_age + (n - 1) * 10
-            out.append({
-                "n": n,
-                "age_start": age_start,
-                "age_end": age_start + 9,
-                "pillar": ganzhi_from_index(i60),
-            })
-        return out
+    out_cycles = []
+    for n in range(1, cycles + 1):
+        i60 = (base + direction * n) % 60
+        age_start = start_age_int + (n - 1) * 10
+        out_cycles.append({
+            'n': n,
+            'age_start': age_start,
+            'age_end': age_start + 9,
+            'pillar': ganzhi_from_index(i60),
+        })
 
     return {
-        "rule": {
-            "term_set": "12-jeol (30deg steps from 315deg)",
-            "day_to_year": 3.0,
-            "start_age_rounding": "floor",
-            "first_cycle_from": "month_pillar_next_or_prev",
+        'rule': {
+            'term_set': '12-jeol (30deg steps from 315deg)',
+            'day_to_year': 3.0,
+            'start_age_rounding': 'floor',
+            'first_cycle_from': 'month_pillar_next_or_prev',
+            'direction_rule': 'male/female + year-stem yin-yang',
         },
-        "birth_longitude_deg": lam,
-        "current_term": {"name": cur_term[1], "deg": cur_term[0]},
-        "forward": {
-            "direction": "forward",
-            "to_term": {"name": next_name, "deg": next_deg, "jd_utc": JD_next, "utc": jd_iso(JD_next)},
-            "days": forward_days,
-            "start_age_years": forward_years,
-            "start_age": forward_age,
-            "cycles": cycle_list(+1, forward_age),
-        },
-        "backward": {
-            "direction": "backward",
-            "to_term": {"name": prev_name, "deg": prev_deg, "jd_utc": JD_prev, "utc": jd_iso(JD_prev)},
-            "days": backward_days,
-            "start_age_years": backward_years,
-            "start_age": backward_age,
-            "cycles": cycle_list(-1, backward_age),
-        },
+        'direction': dir_name,
+        'birth_longitude_deg': lam,
+        'current_term': {'name': cur_term[1], 'deg': cur_term[0]},
+        'to_term': {'name': term_name, 'deg': term_deg, 'jd_utc': JD_target, 'utc': jd_iso(JD_target)},
+        'days': days,
+        'start_age_years': start_years,
+        'start_age': start_age_int,
+        'cycles': out_cycles,
     }
+
 
 def manse_calc(y:int,m:int,d:int, hh:int, mm:int, tz:float, lon:float, use_lmt:bool=False):
     JD_utc = gregorian_to_jd(y,m,d, hh - tz, mm, 0)
@@ -288,6 +300,9 @@ if __name__ == "__main__":
     except Exception:
         pass
     p = argparse.ArgumentParser()
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--male", action="store_true")
+    g.add_argument("--female", action="store_true")
     p.add_argument("--date", required=True)              # YYYY-MM-DD
     p.add_argument("--time", default="12:00")            # HH:MM (local civil)
     p.add_argument("--tz", type=float, default=9.0)      # hours (e.g., 9 for KST)
@@ -307,7 +322,8 @@ if __name__ == "__main__":
             "day":   gz_day,
             "hour":  gz_hour
         },
-        "daewoon": daewoon_info(JD_utc, y, gz_month)
+        "sex": ("female" if args.female else "male"),
+        "daewoon": daewoon_info(JD_utc, y, gz_month, daewoon_direction(gz_year, is_female=bool(args.female)))
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))

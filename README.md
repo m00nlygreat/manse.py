@@ -33,15 +33,11 @@ python manse.py --date YYYY-MM-DD [--time HH:MM] [--tz HOURS] [--lon DEGREES] [-
     "day": "?",
     "hour": "?"
   },
+  "sex": "male",
   "daewoon": {
-    "forward": {
-      "start_age": 0,
-      "cycles": [{"n": 1, "age_start": 0, "pillar": "?"}]
-    },
-    "backward": {
-      "start_age": 0,
-      "cycles": [{"n": 1, "age_start": 0, "pillar": "?"}]
-    }
+    "direction": "forward",
+    "start_age": 0,
+    "cycles": [{"n": 1, "age_start": 0, "pillar": "?"}]
   }
 }
 ```
