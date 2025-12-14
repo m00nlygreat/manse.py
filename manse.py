@@ -294,6 +294,44 @@ def manse_calc(y:int,m:int,d:int, hh:int, mm:int, tz:float, lon:float, use_lmt:b
     return gz_year, gz_month, gz_day, gz_hour
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
+
+
+def parse_compact_datetime(stamp: str):
+    """Parse xyyyymmddHHMM where x in {m,M,f,F}."""
+    if not isinstance(stamp, str):
+        raise ValueError('stamp must be a string')
+    stamp = stamp.strip()
+    if len(stamp) != 13:
+        raise ValueError('stamp must be 13 chars: xyyyymmddHHMM')
+
+    sex_char = stamp[0]
+    if sex_char in ('m', 'M'):
+        is_female = False
+    elif sex_char in ('f', 'F'):
+        is_female = True
+    else:
+        raise ValueError('stamp[0] must be m/M/f/F')
+
+    digits = stamp[1:]
+    if not digits.isdigit():
+        raise ValueError('stamp[1:] must be digits (yyyymmddHHMM)')
+
+    y = int(digits[0:4])
+    m = int(digits[4:6])
+    d = int(digits[6:8])
+    hh = int(digits[8:10])
+    mm = int(digits[10:12])
+
+    if not (1 <= m <= 12):
+        raise ValueError('month out of range')
+    if not (1 <= d <= 31):
+        raise ValueError('day out of range')
+    if not (0 <= hh <= 23):
+        raise ValueError('hour out of range')
+    if not (0 <= mm <= 59):
+        raise ValueError('minute out of range')
+
+    return is_female, y, m, d, hh, mm
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -303,16 +341,27 @@ if __name__ == "__main__":
     g = p.add_mutually_exclusive_group()
     g.add_argument("--male", action="store_true")
     g.add_argument("--female", action="store_true")
-    p.add_argument("--date", required=True)              # YYYY-MM-DD
+    p.add_argument("--simple", help="xyyyymmddHHMM (x=m/M/f/F)")
+    p.add_argument("--date")              # YYYY-MM-DD
     p.add_argument("--time", default="12:00")            # HH:MM (local civil)
     p.add_argument("--tz", type=float, default=9.0)      # hours (e.g., 9 for KST)
     p.add_argument("--lon", type=float, default=126.98)  # Seoul ≈ 126.98E
-    p.add_argument("--lmt", action="store_true")
-    p.add_argument("--cycle", type=int, default=10)     # daewoon cycles         # apply LMT boundary shift
+    p.add_argument("--lmt", action="store_true")         # apply LMT boundary shift
+    p.add_argument("--cycle", type=int, default=10)     # daewoon cycles
     args = p.parse_args()
-
-    y, m, d = map(int, args.date.split("-"))
-    hh, mm = map(int, args.time.split(":"))
+    if args.simple:
+        if args.date is not None or args.time != "12:00" or args.male or args.female:
+            p.error("--simple replaces --date/--time/--male/--female")
+        try:
+            is_female, y, m, d, hh, mm = parse_compact_datetime(args.simple)
+        except ValueError as e:
+            p.error(str(e))
+    else:
+        if not args.date:
+            p.error("--date is required when --simple is not provided")
+        y, m, d = map(int, args.date.split("-"))
+        hh, mm = map(int, args.time.split(":"))
+        is_female = bool(args.female)
     gz_year, gz_month, gz_day, gz_hour = manse_calc(y,m,d,hh,mm,args.tz,args.lon,args.lmt)
     JD_utc = gregorian_to_jd(y,m,d, hh - args.tz, mm, 0)
     result = {
@@ -323,8 +372,8 @@ if __name__ == "__main__":
             "day":   gz_day,
             "hour":  gz_hour
         },
-        "sex": ("female" if args.female else "male"),
-        "daewoon": daewoon_info(JD_utc, y, gz_month, daewoon_direction(gz_year, is_female=bool(args.female)), cycles=args.cycle)
+        "sex": ("female" if is_female else "male"),
+        "daewoon": daewoon_info(JD_utc, y, gz_month, daewoon_direction(gz_year, is_female=is_female), cycles=args.cycle)
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
