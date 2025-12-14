@@ -46,6 +46,8 @@ python manse.py --date YYYY-MM-DD [--time HH:MM] [--male|--female] [--tz HOURS] 
 ```json
 {
   "gregorian": "YYYY-MM-DD HH:MM",
+  "lunar": "YYYY-MM-DD HH:MM",
+  "yoon": false,
   "ganzhi": {
     "year": "…",
     "month": "…",
