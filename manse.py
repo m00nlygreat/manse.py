@@ -341,7 +341,8 @@ if __name__ == "__main__":
     g = p.add_mutually_exclusive_group()
     g.add_argument("--male", action="store_true")
     g.add_argument("--female", action="store_true")
-    p.add_argument("--simple", help="xyyyymmddHHMM (x=m/M/f/F)")
+    p.add_argument("stamp", nargs="?", help="xyyyymmddHHMM (x=m/M/f/F)")
+    p.add_argument("--simple", help="DEPRECATED: use positional stamp (xyyyymmddHHMM)")
     p.add_argument("--date")              # YYYY-MM-DD
     p.add_argument("--time", default="12:00")            # HH:MM (local civil)
     p.add_argument("--tz", type=float, default=9.0)      # hours (e.g., 9 for KST)
@@ -349,16 +350,21 @@ if __name__ == "__main__":
     p.add_argument("--lmt", action="store_true")         # apply LMT boundary shift
     p.add_argument("--cycle", type=int, default=10)     # daewoon cycles
     args = p.parse_args()
-    if args.simple:
+
+    if args.stamp and args.simple:
+        p.error("use either positional stamp or --simple, not both")
+
+    compact = args.stamp or args.simple
+    if compact:
         if args.date is not None or args.time != "12:00" or args.male or args.female:
-            p.error("--simple replaces --date/--time/--male/--female")
+            p.error("stamp replaces --date/--time/--male/--female")
         try:
-            is_female, y, m, d, hh, mm = parse_compact_datetime(args.simple)
+            is_female, y, m, d, hh, mm = parse_compact_datetime(compact)
         except ValueError as e:
             p.error(str(e))
     else:
         if not args.date:
-            p.error("--date is required when --simple is not provided")
+            p.error("positional stamp or --date is required")
         y, m, d = map(int, args.date.split("-"))
         hh, mm = map(int, args.time.split(":"))
         is_female = bool(args.female)
