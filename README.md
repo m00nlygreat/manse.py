@@ -55,7 +55,7 @@ python manse.py --date YYYY-MM-DD [--time HH:MM] [--male|--female] [--tz HOURS] 
     "hour": "…"
   },
   "sex": "male",
-  "daewoon": {
+  "luck_cycles": {
     "direction": "forward",
     "start_age": 0.0,
     "date_start": "YYYY-MM-DDTHH:MM:SS",
@@ -67,6 +67,6 @@ python manse.py --date YYYY-MM-DD [--time HH:MM] [--male|--female] [--tz HOURS] 
 
 ## 대운(기본 동작)
 
-- 기본 출력에 `daewoon`이 포함됩니다.
-- 성별(`sex`)과 출생 `ganzhi.year`의 천간 음양을 기준으로 순행/역행을 선택해 `daewoon.direction`과 대운 목록을 계산합니다.
+- 기본 출력에 `luck_cycles`가 포함됩니다.
+- 성별(`sex`)과 출생 `ganzhi.year`의 천간 음양을 기준으로 순행/역행을 선택해 `luck_cycles.direction`과 대운 목록을 계산합니다.
 - 첫 대운 시작 나이는 “출생 시각 ↔ 해당 방향 절기(절입) 시각”의 차이를 `3일=1년`으로 환산한 뒤, `365.242196일=1년`으로 다시 시간으로 바꿔 초 단위까지 계산합니다.

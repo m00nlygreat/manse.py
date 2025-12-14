@@ -15,9 +15,45 @@ import argparse
 import json
 import sys
 import datetime
+from typing import Optional
 
 TEN_STEMS = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
 TWELVE_BRANCHES = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥']
+
+KOREAN_STEMS = {
+    '甲': '갑',
+    '乙': '을',
+    '丙': '병',
+    '丁': '정',
+    '戊': '무',
+    '己': '기',
+    '庚': '경',
+    '辛': '신',
+    '壬': '임',
+    '癸': '계',
+}
+KOREAN_BRANCHES = {
+    '子': '자',
+    '丑': '축',
+    '寅': '인',
+    '卯': '묘',
+    '辰': '진',
+    '巳': '사',
+    '午': '오',
+    '未': '미',
+    '申': '신',
+    '酉': '유',
+    '戌': '술',
+    '亥': '해',
+}
+
+def ganzhi_to_korean(gz: str) -> str:
+    if not isinstance(gz, str) or len(gz) != 2:
+        raise ValueError(f"Invalid ganzhi: {gz!r}")
+    try:
+        return KOREAN_STEMS[gz[0]] + KOREAN_BRANCHES[gz[1]]
+    except KeyError as e:
+        raise ValueError(f"Invalid ganzhi char: {gz!r}") from e
 
 def ganzhi_from_index(i60:int) -> str:
     return TEN_STEMS[i60 % 10] + TWELVE_BRANCHES[i60 % 12]
@@ -118,7 +154,7 @@ def hour_pillar(day_gz:str, hour:int, minute:int, use_lmt:bool, lon_deg:float, t
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
-# Daewoon (10-year luck cycles) helpers
+# luck_cycles (10-year luck cycles) helpers
 _TROPICAL_YEAR_DAYS = 365.242196
 _TERMS12 = [
     (315.0, "입춘", 2),
@@ -327,7 +363,7 @@ def _add_years_clamped(dt: datetime.datetime, years: int) -> datetime.datetime:
         return dt.replace(year=target_year, day=last_day.day)
 
 
-def daewoon_direction(gz_year: str, is_female: bool) -> int:
+def luck_cycles_direction(gz_year: str, is_female: bool) -> int:
     """Return +1 for forward, -1 for backward."""
     yang_year = _is_yang_stem(gz_year[0])
     if is_female:
@@ -335,7 +371,7 @@ def daewoon_direction(gz_year: str, is_female: bool) -> int:
     return +1 if yang_year else -1
 
 
-def daewoon_info(
+def luck_cycles_info(
     JD_birth_utc: float,
     birth_year: int,
     birth_local_dt: datetime.datetime,
@@ -343,7 +379,7 @@ def daewoon_info(
     direction: int,
     cycles: int = 10,
 ):
-    """Compute daewoon for selected direction (+1 forward, -1 backward)."""
+    """Compute 10-year luck cycles for selected direction (+1 forward, -1 backward)."""
     if direction not in (+1, -1):
         raise ValueError('direction must be +1 (forward) or -1 (backward)')
 
@@ -398,8 +434,8 @@ def daewoon_info(
             'pillar': ganzhi_from_index(i60),
         })
 
-    daewoon_start_date = dt_iso_local(start_dt)
-    daewoon_end_date = dt_iso_local((start_dt + datetime.timedelta(days=cycles * 10.0 * _TROPICAL_YEAR_DAYS)) - datetime.timedelta(seconds=1))
+    luck_cycles_start_date = dt_iso_local(start_dt)
+    luck_cycles_end_date = dt_iso_local((start_dt + datetime.timedelta(days=cycles * 10.0 * _TROPICAL_YEAR_DAYS)) - datetime.timedelta(seconds=1))
 
     return {
         'rule': {
@@ -417,8 +453,8 @@ def daewoon_info(
         'days': days,
         'start_age_years': start_years,
         'start_age': start_years,
-        'date_start': daewoon_start_date,
-        'date_end': daewoon_end_date,
+        'date_start': luck_cycles_start_date,
+        'date_end': luck_cycles_end_date,
         'cycles': out_cycles,
     }
 
@@ -471,9 +507,30 @@ def parse_compact_datetime(stamp: str):
         raise ValueError('minute out of range')
 
     return is_female, y, m, d, hh, mm
+
+def _format_ymdhm(y: int, m: int, d: int, hh: int, mm: int) -> str:
+    return f"{y:04d}-{m:02d}-{d:02d} {hh:02d}:{mm:02d}"
+
+def _iso_to_ymdhm(stamp: Optional[str]) -> Optional[str]:
+    if stamp is None:
+        return None
+    if not isinstance(stamp, str):
+        raise ValueError("stamp must be a string or None")
+    # Accept both "YYYY-MM-DDTHH:MM:SS" and "YYYY-MM-DD HH:MM:SS" forms.
+    stamp = stamp.replace("T", " ").strip()
+    return stamp[:16]
+
+def _normalize_age_years(age_years: float):
+    if isinstance(age_years, bool) or not isinstance(age_years, (int, float)):
+        return age_years
+    nearest = round(float(age_years))
+    if abs(float(age_years) - nearest) < 1e-9:
+        return int(nearest)
+    return float(age_years)
+
 if __name__ == "__main__":
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
     except Exception:
         pass
     p = argparse.ArgumentParser()
@@ -487,7 +544,7 @@ if __name__ == "__main__":
     p.add_argument("--tz", type=float, default=9.0)      # hours (e.g., 9 for KST)
     p.add_argument("--lon", type=float, default=126.98)  # Seoul ≈ 126.98E
     p.add_argument("--lmt", action="store_true")         # apply LMT boundary shift
-    p.add_argument("--cycle", type=int, default=10)     # daewoon cycles
+    p.add_argument("--cycle", type=int, default=10)     # luck cycle count
     args = p.parse_args()
 
     if args.stamp and args.simple:
@@ -517,7 +574,7 @@ if __name__ == "__main__":
         lunar_str = datetime.datetime(lunar_r[0], lunar_r[1], lunar_r[2], hh, mm).isoformat(timespec='seconds')
         yoon = bool(lunar_r[3])
 
-    result = {
+    verbose_result = {
         "gregorian": datetime.datetime(y, m, d, hh, mm).isoformat(timespec='seconds'),
         "lunar": lunar_str,
         "yoon": yoon,
@@ -528,14 +585,37 @@ if __name__ == "__main__":
             "hour":  gz_hour
         },
         "sex": ("female" if is_female else "male"),
-        "daewoon": daewoon_info(
+        "luck_cycles": luck_cycles_info(
             JD_utc,
             y,
             datetime.datetime(y, m, d, hh, mm),
             gz_month,
-            daewoon_direction(gz_year, is_female=is_female),
+            luck_cycles_direction(gz_year, is_female=is_female),
             cycles=args.cycle,
         )
+    }
+
+    cycles = [
+        {
+            "start_age": _normalize_age_years(cycle["age_start"]),
+            "start_date": _iso_to_ymdhm(cycle["date_start"]),
+            "ganzhi": cycle["pillar"],
+            "ganzhi_kor": ganzhi_to_korean(cycle["pillar"]),
+        }
+        for cycle in (verbose_result.get("luck_cycles") or {}).get("cycles") or []
+    ]
+
+    result = {
+        "date": _format_ymdhm(y, m, d, hh, mm),
+        "korean": (
+            f"{ganzhi_to_korean(gz_year)}년 "
+            f"{ganzhi_to_korean(gz_month)}월 "
+            f"{ganzhi_to_korean(gz_day)}일 "
+            f"{ganzhi_to_korean(gz_hour)}시"
+        ),
+        "hanja": f"{gz_year}년 {gz_month}월 {gz_day}일 {gz_hour}시",
+        "cycles": cycles,
+        "verbose": verbose_result,
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
