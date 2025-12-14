@@ -13,6 +13,7 @@ Rules-based Manse (만세력) pillars without DB.
 import math
 import argparse
 import json
+import sys
 
 TEN_STEMS = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
 TWELVE_BRANCHES = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥']
@@ -115,6 +116,162 @@ def hour_pillar(day_gz:str, hour:int, minute:int, use_lmt:bool, lon_deg:float, t
     return stem + branch
 
 # ── Main ────────────────────────────────────────────────────────────────────
+
+# Daewoon (10-year luck cycles) helpers
+_TERMS12 = [
+    (315.0, "입춘", 2),
+    (345.0, "경칩", 3),
+    (15.0,  "청명", 4),
+    (45.0,  "입하", 5),
+    (75.0,  "망종", 6),
+    (105.0, "소서", 7),
+    (135.0, "입추", 8),
+    (165.0, "백로", 9),
+    (195.0, "한로", 10),
+    (225.0, "입동", 11),
+    (255.0, "대설", 12),
+    (285.0, "소한", 1),
+]
+def _i60_from_ganzhi(gz: str) -> int:
+    stem = gz[0]
+    branch = gz[1]
+    s = TEN_STEMS.index(stem)
+    b = TWELVE_BRANCHES.index(branch)
+    for i in range(60):
+        if i % 10 == s and i % 12 == b:
+            return i
+    raise ValueError(f"Invalid ganzhi pair: {gz!r}")
+
+def jd_to_gregorian(jd: float):
+    """Convert JD (UT) to Gregorian calendar date/time."""
+    jd = jd + 0.5
+    Z = int(jd)
+    F = jd - Z
+    if Z < 2299161:
+        A = Z
+    else:
+        alpha = int((Z - 1867216.25) / 36524.25)
+        A = Z + 1 + alpha - int(alpha / 4)
+    B = A + 1524
+    C = int((B - 122.1) / 365.25)
+    D = int(365.25 * C)
+    E = int((B - D) / 30.6001)
+    day = B - D - int(30.6001 * E) + F
+
+    month = E - 1 if E < 14 else E - 13
+    year = C - 4716 if month > 2 else C - 4715
+
+    d_int = int(day)
+    frac = day - d_int
+    hour = int(frac * 24)
+    frac = frac * 24 - hour
+    minute = int(frac * 60)
+    frac = frac * 60 - minute
+    second = int(round(frac * 60))
+
+    if second == 60:
+        second = 59
+    return year, month, d_int, hour, minute, second
+
+def _term_index_from_longitude(solar_long_deg: float) -> int:
+    offset = (solar_long_deg - 315.0) % 360.0
+    return int(offset // 30.0)  # 0..11
+
+def _term_time_candidates_near(birth_year: int, deg: float, guess_month: int):
+    years = [birth_year - 1, birth_year, birth_year + 1]
+    out = []
+    for y in years:
+        out.append(_find_term_time_near(y, deg, guess_month))
+    return out
+
+def _next_prev_term_times(JD_birth_utc: float, birth_year: int, next_term, prev_term):
+    next_deg, next_name, next_guess_m = next_term
+    prev_deg, prev_name, prev_guess_m = prev_term
+
+    eps = 1e-9
+
+    next_candidates = _term_time_candidates_near(birth_year, next_deg, next_guess_m)
+    next_after = [jd for jd in next_candidates if jd > JD_birth_utc + eps]
+    if not next_after:
+        next_after = next_candidates
+    JD_next = min(next_after, key=lambda jd: jd - JD_birth_utc)
+
+    prev_candidates = _term_time_candidates_near(birth_year, prev_deg, prev_guess_m)
+    prev_before = [jd for jd in prev_candidates if jd < JD_birth_utc - eps]
+    if not prev_before:
+        prev_before = prev_candidates
+    JD_prev = max(prev_before, key=lambda jd: jd - JD_birth_utc)
+
+    return (JD_next, next_name, next_deg), (JD_prev, prev_name, prev_deg)
+
+def daewoon_info(JD_birth_utc: float, birth_year: int, gz_month: str, cycles: int = 8):
+    """Compute forward/backward daewoon options (no gender input)."""
+    lam = sun_ecliptic_longitude_deg(JD_birth_utc)
+    idx = _term_index_from_longitude(lam)
+
+    cur_term = _TERMS12[idx]
+    next_term = _TERMS12[(idx + 1) % 12]
+    prev_term = _TERMS12[idx]
+
+    (JD_next, next_name, next_deg), (JD_prev, prev_name, prev_deg) = _next_prev_term_times(
+        JD_birth_utc, birth_year, next_term, prev_term
+    )
+
+    def jd_iso(jd):
+        y, m, d, hh, mm, ss = jd_to_gregorian(jd)
+        return f"{y:04d}-{m:02d}-{d:02d}T{hh:02d}:{mm:02d}:{ss:02d}Z"
+
+    def start_age(days):
+        years = days / 3.0
+        return years, int(math.floor(years + 1e-12))
+
+    forward_days = max(0.0, (JD_next - JD_birth_utc))
+    backward_days = max(0.0, (JD_birth_utc - JD_prev))
+    forward_years, forward_age = start_age(forward_days)
+    backward_years, backward_age = start_age(backward_days)
+
+    base = _i60_from_ganzhi(gz_month)
+
+    def cycle_list(direction: int, first_age: int):
+        out = []
+        for n in range(1, cycles + 1):
+            i60 = (base + direction * n) % 60
+            age_start = first_age + (n - 1) * 10
+            out.append({
+                "n": n,
+                "age_start": age_start,
+                "age_end": age_start + 9,
+                "pillar": ganzhi_from_index(i60),
+            })
+        return out
+
+    return {
+        "rule": {
+            "term_set": "12-jeol (30deg steps from 315deg)",
+            "day_to_year": 3.0,
+            "start_age_rounding": "floor",
+            "first_cycle_from": "month_pillar_next_or_prev",
+        },
+        "birth_longitude_deg": lam,
+        "current_term": {"name": cur_term[1], "deg": cur_term[0]},
+        "forward": {
+            "direction": "forward",
+            "to_term": {"name": next_name, "deg": next_deg, "jd_utc": JD_next, "utc": jd_iso(JD_next)},
+            "days": forward_days,
+            "start_age_years": forward_years,
+            "start_age": forward_age,
+            "cycles": cycle_list(+1, forward_age),
+        },
+        "backward": {
+            "direction": "backward",
+            "to_term": {"name": prev_name, "deg": prev_deg, "jd_utc": JD_prev, "utc": jd_iso(JD_prev)},
+            "days": backward_days,
+            "start_age_years": backward_years,
+            "start_age": backward_age,
+            "cycles": cycle_list(-1, backward_age),
+        },
+    }
+
 def manse_calc(y:int,m:int,d:int, hh:int, mm:int, tz:float, lon:float, use_lmt:bool=False):
     JD_utc = gregorian_to_jd(y,m,d, hh - tz, mm, 0)
     gz_year = year_pillar(JD_utc, y)
@@ -126,6 +283,10 @@ def manse_calc(y:int,m:int,d:int, hh:int, mm:int, tz:float, lon:float, use_lmt:b
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
     p = argparse.ArgumentParser()
     p.add_argument("--date", required=True)              # YYYY-MM-DD
     p.add_argument("--time", default="12:00")            # HH:MM (local civil)
@@ -137,14 +298,16 @@ if __name__ == "__main__":
     y, m, d = map(int, args.date.split("-"))
     hh, mm = map(int, args.time.split(":"))
     gz_year, gz_month, gz_day, gz_hour = manse_calc(y,m,d,hh,mm,args.tz,args.lon,args.lmt)
-
-    print(json.dumps({
+    JD_utc = gregorian_to_jd(y,m,d, hh - args.tz, mm, 0)
+    result = {
         "gregorian": f"{y:04d}-{m:02d}-{d:02d} {hh:02d}:{mm:02d}",
         "ganzhi": {
             "year":  gz_year,
             "month": gz_month,
             "day":   gz_day,
             "hour":  gz_hour
-        }
-    }, ensure_ascii=False, indent=2))
+        },
+        "daewoon": daewoon_info(JD_utc, y, gz_month)
+    }
 
+    print(json.dumps(result, ensure_ascii=False, indent=2))
