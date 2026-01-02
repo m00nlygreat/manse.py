@@ -543,7 +543,8 @@ if __name__ == "__main__":
     p.add_argument("--time", default="12:00")            # HH:MM (local civil)
     p.add_argument("--tz", type=float, default=9.0)      # hours (e.g., 9 for KST)
     p.add_argument("--lon", type=float, default=126.98)  # Seoul ≈ 126.98E
-    p.add_argument("--lmt", action="store_true")         # apply LMT boundary shift
+    p.add_argument("--lmt", action="store_true", default=True)  # apply LMT boundary shift
+    p.add_argument("--no-lmt", action="store_false", dest="lmt")  # disable LMT boundary shift
     p.add_argument("--cycle", type=int, default=10)     # luck cycle count
     args = p.parse_args()
 
