@@ -1,0 +1,62 @@
+{
+  "date": "1988-01-27 10:30",
+  "korean": "정묘년 계축월 신사일 계사시",
+  "hanja": "丁卯년 癸丑월 辛巳일 癸巳시",
+  "cycles": [
+    {
+      "start_age": 6.979955079965293,
+      "start_date": "1995-01-19 19:28",
+      "ganzhi": "壬子",
+      "ganzhi_kor": "임자"
+    }
+  ],
+  "verbose": {
+    "gregorian": "1988-01-27T10:30:00",
+    "lunar": "1987-12-09T10:30:00",
+    "yoon": false,
+    "ganzhi": {
+      "year": "丁卯",
+      "month": "癸丑",
+      "day": "辛巳",
+      "hour": "癸巳"
+    },
+    "sex": "male",
+    "luck_cycles": {
+      "rule": {
+        "term_set": "12-jeol (30deg steps from 315deg)",
+        "day_to_year": 3.0,
+        "tropical_year_days": 365.242196,
+        "start_age_rounding": "exact",
+        "first_cycle_from": "month_pillar_next_or_prev",
+        "direction_rule": "male/female + year-stem yin-yang"
+      },
+      "direction": "backward",
+      "birth_longitude_deg": 306.3222526543241,
+      "current_term": {
+        "name": "소한",
+        "deg": 285.0
+      },
+      "to_term": {
+        "name": "소한",
+        "deg": 285.0,
+        "jd_utc": 2447166.62263476,
+        "utc": "1988-01-06T02:56:36Z"
+      },
+      "days": 20.93986523989588,
+      "start_age_years": 6.979955079965293,
+      "start_age": 6.979955079965293,
+      "date_start": "1995-01-19T19:28:44",
+      "date_end": "2005-01-19T05:36:20",
+      "cycles": [
+        {
+          "n": 1,
+          "age_start": 6.979955079965293,
+          "age_end": 16.979955079965293,
+          "date_start": "1995-01-19T19:28:44",
+          "date_end": "2005-01-19T05:36:20",
+          "pillar": "壬子"
+        }
+      ]
+    }
+  }
+}
